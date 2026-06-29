@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Digital Circus EXTREME</title>
+<title>Digital Circus ULTIMATE</title>
 
 <style>
 body {
@@ -12,31 +12,39 @@ body {
     font-family: Arial;
 }
 
-canvas {
-    display: block;
-    margin: auto;
-    border: 3px solid #fff;
-}
-
 /* MENU */
 #menu {
     position: absolute;
     width: 100%;
     height: 100%;
-    color: white;
+    background: radial-gradient(circle, #ff00ff, black);
     display: flex;
     justify-content: center;
     align-items: center;
     flex-direction: column;
-    background: radial-gradient(circle, #ff00ff, #000);
+    color: white;
+    animation: bg 3s infinite alternate;
+}
+
+@keyframes bg {
+    0% { filter: hue-rotate(0deg); }
+    100% { filter: hue-rotate(180deg); }
 }
 
 button {
-    padding: 15px 30px;
-    font-size: 20px;
+    padding: 15px 25px;
+    font-size: 18px;
     cursor: pointer;
+    margin-top: 10px;
 }
 
+canvas {
+    display: block;
+    margin: auto;
+    border: 3px solid white;
+}
+
+/* UI */
 #ui {
     position: absolute;
     top: 10px;
@@ -56,127 +64,213 @@ button {
 <div id="ui" style="display:none">
     Score: <span id="score">0</span><br>
     Recorde: <span id="record">0</span><br>
+    Vida:
     <div style="width:200px;height:20px;border:1px solid white;">
-        <div id="lifeBar" style="height:100%;width:100%;background:red;"></div>
+        <div id="lifeBar" style="height:100%;background:red;"></div>
     </div>
+    <button onclick="restart()">Reiniciar</button>
 </div>
 
 <canvas id="c" width="600" height="400"></canvas>
+
+<audio id="music" loop>
+https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3
+</audio>
 
 <script>
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
 
-let player, enemies, score, record, life, boss;
+// ========================
+// VARIÁVEIS
+// ========================
+
+let player, enemies, particles, boss;
+let score, record, life;
 let gameRunning = false;
 let paused = false;
 let chaos = 0;
 
+// ========================
+// INICIALIZAR
+// ========================
+
 function init(){
-    player = {x:300,y:200,size:25,dash:0};
-    enemies=[];
-    score=0;
-    life=100;
-    boss=null;
-    chaos=0;
+    player = {
+        x: 300,
+        y: 200,
+        size: 25,
+        dash: 0
+    };
+
+    enemies = [];
+    particles = [];
+    boss = null;
+
+    score = 0;
+    life = 100;
+    chaos = 0;
 
     record = localStorage.getItem("record") || 0;
     document.getElementById("record").innerText = record;
 }
 
+// ========================
+// CONTROLES
+// ========================
+
+let keys = {};
+
+document.addEventListener("keydown", e=>{
+    keys[e.key] = true;
+    if(e.key === "p") paused = !paused;
+});
+
+document.addEventListener("keyup", e=>{
+    keys[e.key] = false;
+});
+
+// MOBILE
+c.addEventListener("touchmove", e=>{
+    let t = e.touches[0];
+    player.x = t.clientX - 20;
+    player.y = t.clientY - 20;
+});
+
+// CLIQUE = EFEITO
+c.addEventListener("click", ()=>{
+    explode(player.x, player.y);
+});
+
+// ========================
+// FUNÇÕES DO JOGO
+// ========================
+
 function startGame(){
-    document.getElementById("menu").style.display="none";
-    document.getElementById("ui").style.display="block";
+    document.getElementById("menu").style.display = "none";
+    document.getElementById("ui").style.display = "block";
+    document.getElementById("music").play();
     init();
-    gameRunning=true;
+    gameRunning = true;
 }
 
-let keys={};
-document.addEventListener("keydown", e=>{
-    keys[e.key]=true;
+function restart(){
+    init();
+    gameRunning = true;
+}
 
-    if(e.key==="p") paused=!paused;
-});
-document.addEventListener("keyup", e=>keys[e.key]=false);
+// ========================
+// INIMIGOS
+// ========================
 
 function spawn(){
     enemies.push({
-        x:Math.random()*600,
-        y:-20,
-        size:20+Math.random()*20,
-        speed:2+Math.random()*3,
-        color:`hsl(${Math.random()*360},100%,60%)`
+        x: Math.random()*600,
+        y: -20,
+        size: 20 + Math.random()*25,
+        speed: 2 + Math.random()*3,
+        color: `hsl(${Math.random()*360},100%,60%)`
     });
 }
 
+setInterval(spawn, 500);
+
+// ========================
+// BOSS
+// ========================
+
 function spawnBoss(){
-    boss = {x:250,y:50,size:70,life:100};
+    boss = {
+        x: 250,
+        y: 60,
+        size: 70,
+        life: 100
+    };
 }
 
-// partículas
-let particles=[];
+// ========================
+// PARTÍCULAS
+// ========================
+
 function explode(x,y){
-    for(let i=0;i<10;i++){
+    for(let i=0;i<15;i++){
         particles.push({
-            x,y,
-            dx:(Math.random()-0.5)*6,
-            dy:(Math.random()-0.5)*6,
-            life:30
+            x: x,
+            y: y,
+            dx: (Math.random()-0.5)*6,
+            dy: (Math.random()-0.5)*6,
+            life: 40
         });
     }
 }
 
+// ========================
+// COLISÃO
+// ========================
+
+function collide(a,b){
+    return a.x < b.x + b.size &&
+           a.x + a.size > b.x &&
+           a.y < b.y + b.size &&
+           a.y + a.size > b.y;
+}
+
+// ========================
+// UPDATE
+// ========================
+
 function update(){
     if(!gameRunning || paused) return;
 
-    if(keys["ArrowUp"]) player.y-=4;
-    if(keys["ArrowDown"]) player.y+=4;
-    if(keys["ArrowLeft"]) player.x-=4;
-    if(keys["ArrowRight"]) player.x+=4;
+    // movimento
+    if(keys["ArrowUp"]) player.y -= 4;
+    if(keys["ArrowDown"]) player.y += 4;
+    if(keys["ArrowLeft"]) player.x -= 4;
+    if(keys["ArrowRight"]) player.x += 4;
 
-    // DASH
-    if(keys[" "] && player.dash<=0){
-        player.dash=10;
+    // dash
+    if(keys[" "] && player.dash <= 0){
+        player.dash = 10;
     }
 
-    if(player.dash>0){
+    if(player.dash > 0){
         player.dash--;
         player.x += (keys["ArrowRight"]-keys["ArrowLeft"])*7;
         player.y += (keys["ArrowDown"]-keys["ArrowUp"])*7;
     }
 
-    // MODO CAOS
-    if(keys["Shift"] && chaos<=0){
-        chaos=200;
+    // modo caos
+    if(keys["Shift"] && chaos <= 0){
+        chaos = 200;
     }
 
-    if(chaos>0){
-        chaos--;
-    }
+    if(chaos > 0) chaos--;
 
-    // limites
-    player.x=Math.max(0,Math.min(575,player.x));
-    player.y=Math.max(0,Math.min(375,player.y));
+    // limite tela
+    player.x = Math.max(0, Math.min(575, player.x));
+    player.y = Math.max(0, Math.min(375, player.y));
 
+    // inimigos
     for(let i=0;i<enemies.length;i++){
-        let e=enemies[i];
-        e.y+=e.speed;
+        let e = enemies[i];
+        e.y += e.speed;
 
         if(collide(player,e)){
-            life-= chaos>0 ? 2 : 10;
+            life -= chaos>0 ? 2 : 10;
             explode(e.x,e.y);
             enemies.splice(i,1);
             i--;
         }
 
-        if(e.y>400){
+        if(e.y > 400){
             enemies.splice(i,1);
             score++;
             i--;
         }
     }
 
-    if(score>15 && !boss){
+    // boss
+    if(score > 20 && !boss){
         spawnBoss();
     }
 
@@ -184,37 +278,36 @@ function update(){
         boss.x += Math.sin(Date.now()/200)*3;
 
         if(collide(player,boss)){
-            life-=1;
+            life -= 1;
         }
     }
 
     // partículas
     for(let i=0;i<particles.length;i++){
-        let p=particles[i];
-        p.x+=p.dx;
-        p.y+=p.dy;
+        let p = particles[i];
+        p.x += p.dx;
+        p.y += p.dy;
         p.life--;
-        if(p.life<=0){
+
+        if(p.life <= 0){
             particles.splice(i,1);
             i--;
         }
     }
 
-    document.getElementById("score").innerText=score;
-    document.getElementById("lifeBar").style.width=life+"%";
+    // UI
+    document.getElementById("score").innerText = score;
+    document.getElementById("lifeBar").style.width = life+"%";
 
-    if(score>record){
-        record=score;
-        localStorage.setItem("record",record);
+    if(score > record){
+        record = score;
+        localStorage.setItem("record", record);
     }
 }
 
-function collide(a,b){
-    return a.x < b.x+b.size &&
-           a.x+25 > b.x &&
-           a.y < b.y+b.size &&
-           a.y+25 > b.y;
-}
+// ========================
+// DESENHO
+// ========================
 
 function draw(){
     ctx.clearRect(0,0,600,400);
@@ -226,7 +319,7 @@ function draw(){
     if(!gameRunning) return;
 
     // player
-    ctx.fillStyle="red";
+    ctx.fillStyle = "red";
     ctx.fillRect(player.x,player.y,25,25);
 
     // olhos
@@ -238,16 +331,16 @@ function draw(){
 
     // inimigos
     for(let e of enemies){
-        ctx.fillStyle=e.color;
+        ctx.fillStyle = e.color;
         ctx.fillRect(e.x,e.y,e.size,e.size);
     }
 
     // boss
     if(boss){
-        ctx.fillStyle="purple";
+        ctx.fillStyle = "purple";
         ctx.fillRect(boss.x,boss.y,boss.size,boss.size);
-        ctx.fillStyle="white";
-        ctx.fillText("BOSS",boss.x+10,boss.y-5);
+        ctx.fillStyle = "white";
+        ctx.fillText("BOSS", boss.x+10, boss.y-5);
     }
 
     // partículas
@@ -258,19 +351,27 @@ function draw(){
 
     // pause
     if(paused){
-        ctx.fillStyle="white";
-        ctx.font="30px Arial";
+        ctx.fillStyle = "white";
+        ctx.font = "30px Arial";
         ctx.fillText("PAUSADO",220,200);
     }
 
     // game over
-    if(life<=0){
+    if(life <= 0){
         ctx.fillStyle="white";
         ctx.font="30px Arial";
-        ctx.fillText("FIM DO SHOW 🤡",170,200);
-        gameRunning=false;
+        ctx.fillText("FIM DO SHOW 🤡",160,180);
+
+        ctx.font="20px Arial";
+        ctx.fillText("Clique em Reiniciar 👇",170,220);
+
+        gameRunning = false;
     }
 }
+
+// ========================
+// LOOP
+// ========================
 
 function loop(){
     update();
@@ -278,8 +379,8 @@ function loop(){
     requestAnimationFrame(loop);
 }
 
-setInterval(spawn,500);
 loop();
+
 </script>
 
 </body>
